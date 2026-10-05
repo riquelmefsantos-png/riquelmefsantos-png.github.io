@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treguity</title>
+    <style>
+        html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const cena = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+        camera.position.z = 3.2;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setPixelRatio(devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Troque "imagem.jpg" pelo nome da sua imagem
+        const textura = new THREE.TextureLoader().load("imagem.jpg");
+        const esfera = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 64, 64),
+            new THREE.MeshBasicMaterial({ map: textura, color: 0xffffff })
+        );
+        esfera.rotation.x = 0.3; // leve inclinação
+        cena.add(esfera);
+
+        function animar() {
+            requestAnimationFrame(animar);
+            esfera.rotation.y += 0.01; // velocidade da rotação
+            renderer.render(cena, camera);
+        }
+        animar();
+
+        addEventListener("resize", () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+    </script>
+</body>
+</html>
