@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FerveÁgua™ — o site para ferver água</title>
+<style>
+:root{--bg:#fdf3e3;--fg:#2b1d12;--card:#fff8ec;--ac:#e8541e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1410;--fg:#f6e8d4;--card:#2a1e17;--ac:#ff7a3d}}
+:root[data-theme="dark"]{--bg:#1c1410;--fg:#f6e8d4;--card:#2a1e17;--ac:#ff7a3d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:'Trebuchet MS',system-ui,sans-serif;text-align:center;overflow-x:hidden}
+h1{margin:18px 10px 0;font-size:clamp(1.6rem,6vw,2.6rem)}
+.sub{opacity:.7;margin:4px 10px 0}
+#stage{position:relative;width:min(340px,92vw);height:320px;margin:10px auto 0}
+#pot{position:absolute;left:50%;bottom:50px;width:240px;height:150px;transform:translateX(-50%);background:#8d949c;border-radius:6px 6px 40px 40px;overflow:hidden;cursor:crosshair;box-shadow:inset 0 0 0 4px #5f656c}
+#water{position:absolute;left:0;right:0;bottom:0;height:75%;background:#3aa0ff;transition:background .3s}
+#pot:before,#pot:after{content:"";position:absolute;top:30px;width:26px;height:10px;background:#5f656c;border-radius:5px;z-index:2}
+.b{position:absolute;bottom:0;border-radius:50%;background:rgba(255,255,255,.7);animation:up linear forwards}
+@keyframes up{to{transform:translateY(-120px);opacity:0}}
+.s{position:absolute;bottom:200px;font-size:26px;opacity:.6;animation:st 2.2s ease-out forwards;pointer-events:none}
+@keyframes st{to{transform:translateY(-90px) scale(1.8);opacity:0}}
+#stove{position:absolute;left:50%;bottom:0;width:280px;height:54px;transform:translateX(-50%);background:#3b3b3f;border-radius:10px;display:flex;justify-content:center;align-items:flex-start;gap:6px;padding-top:2px}
+.f{font-size:34px;line-height:1;transition:transform .2s}
+.card{background:var(--card);border-radius:14px;padding:14px;margin:12px auto;width:min(420px,92vw);text-align:left}
+.bar{height:22px;border-radius:11px;background:#0002;overflow:hidden}
+#fill{height:100%;width:0;background:linear-gradient(90deg,#3aa0ff,#ffb02e,#e8541e)}
+label{display:block;margin-top:8px;font-size:.9rem}
+input[type=range],select{width:100%}
+select{padding:6px;background:var(--bg);color:var(--fg);border-radius:6px}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:1rem;cursor:pointer}
+#msg{min-height:2.6em;font-weight:bold}
+#win{display:none;position:fixed;inset:0;background:#000a;z-index:9;align-items:center;justify-content:center;flex-direction:column;color:#fff;font-size:1.3rem;gap:12px}
+#win h2{font-size:clamp(2rem,10vw,4rem);margin:0}
+</style>
+</head>
+<body>
+<h1> FerveÁgua™</h1>
+<p class="sub">Você só precisa de uma coisa: ferver a água. Boa sorte.</p>
+<div id="stage">
+  <div id="pot" title="Esfregue o mouse aqui"><div id="water"></div></div>
+  <div id="stove"></div>
+</div>
+<div class="card">
+  <div class="bar"><div id="fill"></div></div>
+  <p id="temp" style="margin:6px 0 0">22.0 °C / 100 °C</p>
+  <p id="msg">Ligue o fogo. Ou esfregue a panela.</p>
+</div>
+<div class="card">
+  <label>🔥 Fogo: <b id="fv">0</b>%<input id="flame" type="range" min="0" max="100" value="0"></label>
+  <label>⛰️ Altitude: <b id="av">0</b> m (muda o ponto de ebulição)<input id="alt" type="range" min="0" max="8848" value="0" step="50"></label>
+  <label>🧂 Ingrediente secreto
+    <select id="ing"><option value="0">Nenhum (água pura)</option><option value="1">Sal (+ ponto de ebulição)</option><option value="2">Ansiedade (esquenta mais rápido)</option><option value="3">Olhar de ódio (nada muda)</option></select></label>
+  <p style="margin:10px 0 0">Águas fervidas: <b id="cnt">0</b></p>
+</div>
+<div id="win"><h2>🎉 FERVEU! 🎉</h2><div id="wt"></div><button id="again">Ferver outra</button></div>
+<script>
+const $=id=>document.getElementById(id);
+const pot=$('pot'),stage=$('stage');
+let temp=22,count=0,done=false,watch=false,last=performance.now(),rub=0;
+const stove=$('stove');for(let i=0;i<5;i++){const s=document.createElement('span');s.className='f';s.textContent='🔥';s.style.opacity=0;stove.appendChild(s)}
+const flames=[...stove.children];
+// áudio de borbulhas
+let ac,gain;
+function startAudio(){if(ac)return;try{ac=new (window.AudioContext||window.webkitAudioContext)();
+const buf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),d=buf.getChannelData(0);
+for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+const src=ac.createBufferSource();src.buffer=buf;src.loop=true;
+const f=ac.createBiquadFilter();f.type='bandpass';f.frequency.value=500;
+gain=ac.createGain();gain.gain.value=0;src.connect(f).connect(gain).connect(ac.destination);src.start()}catch(e){}}
+document.addEventListener('pointerdown',startAudio);
+pot.addEventListener('mouseenter',()=>watch=true);
+pot.addEventListener('mouseleave',()=>watch=false);
+pot.addEventListener('mousemove',e=>{rub+=Math.hypot(e.movementX,e.movementY)*0.01});
+$('flame').oninput=e=>$('fv').textContent=e.target.value;
+$('alt').oninput=e=>$('av').textContent=e.target.value;
+function bp(){let b=100-$('alt').value/300;if($('ing').value==='1')b+=3;return b}
+function bubble(){const b=document.createElement('div');b.className='b';const sz=4+Math.random()*10;
+b.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*95}%;animation-duration:${.6+Math.random()}s`;
+$('water').appendChild(b);setTimeout(()=>b.remove(),1700)}
+function steam(){const s=document.createElement('div');s.className='s';s.textContent='☁️';
+s.style.left=(60+Math.random()*180)+'px';stage.appendChild(s);setTimeout(()=>s.remove(),2300)}
+function msgFor(t,b){const r=t/b;
+if(watch&&r<.98)return' Panela vigiada nunca ferve. Desvie o mouse!';
+if(r<.3)return'Água fria';
+if(r<.55)return'Mornando...';
+if(r<.8)return'Já dá pra fazer um chá fraco.';
+if(r<.95)return'Bolinhas! Está quase!';
+return'ÓTIMO. Não pisque.'}
+function loop(now){const dt=Math.min((now-last)/1000,.1);last=now;
+const fl=$('flame').value/100,b=bp();
+if(!done){
+ let k=({'2':1.6,'3':1}[$('ing').value])||1;
+ let heat=fl*7*k*(watch?.12:1)+rub*3;rub*=.9;
+ temp+=heat*dt-(temp-22)*.012*dt;
+ if(temp>=b){done=true;count++;$('cnt').textContent=count;
+  $('wt').textContent=`Ponto de ebulição aqui: ${b.toFixed(1)} °C. Parabéns, cientista.`;$('win').style.display='flex';}
+}
+flames.forEach((f,i)=>{f.style.opacity=fl>i/5?1:0;f.style.transform=`scale(${.6+fl*.8})`});
+const r=Math.max(0,(temp-22)/(b-22));
+$('fill').style.width=Math.min(100,r*100)+'%';
+$('temp').textContent=`${temp.toFixed(1)} °C / ${b.toFixed(1)} °C`;
+$('msg').textContent=done?'Ferveu!':msgFor(temp,b);
+$('water').style.background=`hsl(${210-Math.min(1,r)*10},${80}%,${58-r*10}%)`;
+const bubbleRate=Math.max(0,(temp-50)/(b-50));
+if(Math.random()<bubbleRate*.6)bubble();
+if(temp>75&&Math.random()<.04+bubbleRate*.1)steam();
+if(gain)gain.gain.value=Math.min(.35,bubbleRate*.3);
+requestAnimationFrame(loop)}
+$('again').onclick=()=>{temp=22;done=false;$('win').style.display='none';$('flame').value=0;$('fv').textContent=0};
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
