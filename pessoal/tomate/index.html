@@ -38,6 +38,26 @@
     height: 100%;
     pointer-events: none;
   }
+  #btnLimpar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 10;
+    padding: 14px 28px;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: #fff;
+    background: linear-gradient(180deg, #4aa3e0, #2a78b8);
+    border: none;
+    border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  #btnLimpar:active { transform: translateX(-50%) scale(0.96); }
+  #btnLimpar:disabled { opacity: 0.6; cursor: default; }
 </style>
 </head>
 <body>
@@ -46,6 +66,7 @@
   <img id="alvo" src="imagem.jpg" alt="Imagem" draggable="false">
 </div>
 <canvas id="tela"></canvas>
+<button id="btnLimpar" type="button"> Limpar</button>
 
 <script>
 (function () {
@@ -68,10 +89,17 @@
   // Camada permanente com as manchas (acumulam na imagem)
   const manchas = document.createElement('canvas');
   const mctx = manchas.getContext('2d');
+  // Camada de água (spray) que também é removida pelo rodo
+  const agua = document.createElement('canvas');
+  const actx = agua.getContext('2d');
+  let fase = null; // null | 'spray' | 'rodo'
   function ajustarManchas() {
     manchas.width = canvas.width;
     manchas.height = canvas.height;
     mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    agua.width = canvas.width;
+    agua.height = canvas.height;
+    actx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   ajustarManchas();
   window.addEventListener('resize', ajustarManchas);
@@ -207,6 +235,7 @@
 
   // ---------- Lançar tomate ----------
   function lancar(alvoX, alvoY) {
+    if (fase) return; // não joga tomate durante a limpeza
     // começa em um lado/baixo da tela
     const lado = Math.random();
     let sx, sy;
@@ -239,12 +268,148 @@
   cena.addEventListener('touchstart', aoToque, { passive: false });
   document.addEventListener('contextmenu', e => e.preventDefault());
 
+  // ---------- Limpeza: spray de água + rodo ----------
+  const btn = document.getElementById('btnLimpar');
+  const spray = { inicio: 0, dur: 2800, gotas: [] };
+  const rodo = { inicio: 0, dur: 2400, y: 0 };
+
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (fase) return;
+    fase = 'spray';
+    spray.inicio = performance.now();
+    spray.gotas.length = 0;
+    btn.disabled = true;
+    btn.textContent = '💦 Limpando…';
+  });
+
+  function sprayX(t) {
+    // vai e volta pela largura da tela
+    return W * (0.1 + 0.8 * (0.5 - 0.5 * Math.cos(t * Math.PI * 3)));
+  }
+
+  function desenharSpray(x, y, t) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(t * 40) * 0.04);
+    // corpo
+    ctx.fillStyle = '#3b8fd6';
+    ctx.beginPath(); ctx.roundRect(-16, -70, 32, 60, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath(); ctx.roundRect(-11, -64, 6, 48, 3); ctx.fill();
+    // cabeça
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.roundRect(-22, -16, 44, 20, 6); ctx.fill();
+    // gatilho
+    ctx.fillStyle = '#c9c9c9';
+    ctx.beginPath(); ctx.roundRect(18, -14, 12, 22, 4); ctx.fill();
+    // bico
+    ctx.fillStyle = '#444';
+    ctx.beginPath(); ctx.roundRect(-6, 2, 12, 12, 3); ctx.fill();
+    ctx.restore();
+  }
+
+  function atualizarSpray(agora) {
+    const t = (agora - spray.inicio) / spray.dur;
+    if (t >= 1) {
+      fase = 'rodo';
+      rodo.inicio = agora;
+      escorrendo.length = 0;
+      spray.gotas.length = 0;
+      return;
+    }
+    const bx = sprayX(t);
+    const by = 90;
+
+    // novas gotas em leque
+    for (let i = 0; i < 12; i++) {
+      const ang = Math.PI / 2 + rand(-0.6, 0.6);
+      const v = rand(7, 14);
+      spray.gotas.push({
+        x: bx + rand(-4, 4), y: by + 14,
+        vx: Math.cos(ang) * v, vy: Math.sin(ang) * v,
+        alvoY: rand(H * 0.12, H * 0.98),
+        r: rand(1.5, 3.2)
+      });
+    }
+
+    // a água dilui as manchas aos poucos
+    mctx.save();
+    mctx.globalCompositeOperation = 'destination-out';
+    mctx.fillStyle = 'rgba(0,0,0,0.03)';
+    mctx.fillRect(0, 0, W, H);
+    mctx.restore();
+
+    // gotas em voo / pousando na camada de água
+    for (let i = spray.gotas.length - 1; i >= 0; i--) {
+      const g = spray.gotas[i];
+      g.x += g.vx;
+      g.y += g.vy;
+      if (g.y >= g.alvoY) {
+        actx.fillStyle = 'rgba(170, 215, 255, 0.28)';
+        actx.beginPath();
+        actx.arc(g.x, g.y, g.r * rand(1.5, 3.5), 0, Math.PI * 2);
+        actx.fill();
+        spray.gotas.splice(i, 1);
+        continue;
+      }
+      ctx.fillStyle = 'rgba(210, 235, 255, 0.85)';
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    desenharSpray(bx, by, t);
+  }
+
+  function atualizarRodo(agora) {
+    const t = Math.min(1, (agora - rodo.inicio) / rodo.dur);
+    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const y = -30 + e * (H + 60);
+
+    // tudo acima da lâmina é limpo
+    mctx.clearRect(0, 0, W, Math.max(0, y + 6));
+    actx.clearRect(0, 0, W, Math.max(0, y + 6));
+
+    // água empurrada à frente da lâmina
+    ctx.fillStyle = 'rgba(170, 215, 255, 0.55)';
+    ctx.fillRect(0, y + 6, W, 9);
+
+    // armação, borracha e cabo
+    ctx.fillStyle = '#6b6b6b';
+    ctx.fillRect(0, y - 14, W, 14);
+    ctx.fillStyle = '#151515';
+    ctx.fillRect(0, y, W, 6);
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(W / 2 - 40, y - 24, 80, 12);
+    ctx.fillStyle = '#e0a030';
+    ctx.beginPath(); ctx.roundRect(W / 2 - 11, y - 150, 22, 130, 9); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.roundRect(W / 2 - 6, y - 142, 4, 110, 2); ctx.fill();
+
+    if (t >= 1) {
+      mctx.clearRect(0, 0, W, H);
+      actx.clearRect(0, 0, W, H);
+      escorrendo.length = 0;
+      gotas.length = 0;
+      fase = null;
+      btn.disabled = false;
+      btn.textContent = '🧽 Limpar';
+    }
+  }
+
+  function limpeza(agora) {
+    if (fase === 'spray') atualizarSpray(agora);
+    else if (fase === 'rodo') atualizarRodo(agora);
+  }
+
   // ---------- Loop ----------
   function loop(agora) {
     ctx.clearRect(0, 0, W, H);
 
     // manchas acumuladas
     ctx.drawImage(manchas, 0, 0, W, H);
+    ctx.drawImage(agua, 0, 0, W, H);
 
     // sucos escorrendo (desenhados direto na camada permanente)
     for (let i = escorrendo.length - 1; i >= 0; i--) {
@@ -294,10 +459,12 @@
       ctx.fill();
     }
 
+    limpeza(agora);
+
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
 })();
 </script>
 </body>
-  </html>
+</html>
