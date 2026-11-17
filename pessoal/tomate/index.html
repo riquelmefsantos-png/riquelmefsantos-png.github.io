@@ -90,6 +90,7 @@
 <div id="placar">
   <div>🍅 Você jogou: <b id="tomatesMeus">0</b></div>
   <div>🌎 Todos jogaram: <b id="tomatesTodos">…</b></div>
+  <div>🪙 Tokens: <b id="tokensMeus">0</b></div>
 </div>
 
 
@@ -162,16 +163,27 @@
   const rand = (a, b) => Math.random() * (b - a) + a;
 
   // ---------- Desenho do tomate ----------
-  function desenharTomate(c, x, y, r, rot) {
+  function desenharTomate(c, x, y, r, rot, dourado) {
     c.save();
     c.translate(x, y);
     c.rotate(rot);
 
+    if (dourado) {
+      c.shadowColor = 'rgba(255, 200, 40, 0.95)';
+      c.shadowBlur = r * 0.9;
+    }
+
     // corpo
     const g = c.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r * 1.05);
-    g.addColorStop(0, '#ff6b5a');
-    g.addColorStop(0.45, '#e5261b');
-    g.addColorStop(1, '#a30f0a');
+    if (dourado) {
+      g.addColorStop(0, '#fff6b0');
+      g.addColorStop(0.45, '#ffc928');
+      g.addColorStop(1, '#b57a00');
+    } else {
+      g.addColorStop(0, '#ff6b5a');
+      g.addColorStop(0.45, '#e5261b');
+      g.addColorStop(1, '#a30f0a');
+    }
     c.fillStyle = g;
     c.beginPath();
     c.ellipse(0, 0, r, r * 0.92, 0, 0, Math.PI * 2);
@@ -209,11 +221,14 @@
   }
 
   // ---------- Mancha de tomate esmagado ----------
-  function desenharMancha(c, x, y, tam) {
+  function desenharMancha(c, x, y, tam, dourado) {
+    const pal = dourado
+      ? { principal: 'rgba(255, 196, 30, 0.9)', miolo: 'rgba(255, 240, 140, 0.75)', gota: 'rgba(255, 190, 20, 0.9)' }
+      : { principal: 'rgba(200, 25, 15, 0.88)', miolo: 'rgba(255, 90, 60, 0.6)', gota: 'rgba(200, 25, 15, 0.85)' };
     // mancha principal
     c.save();
     c.translate(x, y);
-    c.fillStyle = 'rgba(200, 25, 15, 0.88)';
+    c.fillStyle = pal.principal;
     c.beginPath();
     const pts = 14;
     for (let i = 0; i <= pts; i++) {
@@ -228,7 +243,7 @@
     c.fill();
 
     // miolo mais claro
-    c.fillStyle = 'rgba(255, 90, 60, 0.6)';
+    c.fillStyle = pal.miolo;
     c.beginPath();
     c.ellipse(0, 0, tam * 0.55, tam * 0.45, rand(0, 3), 0, Math.PI * 2);
     c.fill();
@@ -243,7 +258,7 @@
     }
 
     // respingos ao redor
-    c.fillStyle = 'rgba(200, 25, 15, 0.85)';
+    c.fillStyle = pal.gota;
     for (let i = 0; i < 18; i++) {
       const a = rand(0, Math.PI * 2);
       const d = tam * rand(1.1, 2.2);
@@ -255,8 +270,8 @@
   }
 
   // ---------- Impacto ----------
-  function impacto(x, y, tam) {
-    desenharMancha(mctx, x, y, tam);
+  function impacto(x, y, tam, dourado) {
+    desenharMancha(mctx, x, y, tam, dourado);
 
     // respingos voando
     for (let i = 0; i < 22; i++) {
@@ -267,7 +282,8 @@
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v - 2,
         r: rand(2, 6),
-        vida: 1
+        vida: 1,
+        dourado: dourado
       });
     }
 
@@ -279,7 +295,8 @@
         y: y + rand(0, tam * 0.3),
         larg: rand(3, 7),
         vel: rand(0.6, 1.8),
-        restante: rand(40, 160)
+        restante: rand(40, 160),
+        dourado: dourado
       });
     }
   }
@@ -297,6 +314,7 @@
 
     voando.push({
       sx, sy, tx: alvoX, ty: alvoY,
+      dourado: Math.random() < CHANCE_TOKEN, // tomate dourado = token
       t: 0,
       dur: rand(280, 420), // ms
       arco: rand(120, 260),
@@ -325,7 +343,7 @@
   // ---------- Placar de tomates ----------
   // Para ativar o contador ONLINE: crie um workspace gratuito em counterapi.dev
   // e coloque o nome dele aqui. Sem isso, só o contador local funciona.
-  const CONTADOR_WORKSPACE = 'riquelme-ferreiras-team-6272';
+  const CONTADOR_WORKSPACE = 'COLOQUE-SEU-WORKSPACE';
   const CONTADOR_NOME = 'tomates-jogados';
   const CHAVE_LOCAL = 'tomates_meus';
 
@@ -338,7 +356,7 @@
   elMeus.textContent = meus.toLocaleString('pt-BR');
 
   // Contador online (todos os visitantes) — a biblioteca é carregada sem travar a página
-  const onlineAtivo = CONTADOR_WORKSPACE !== 'riquelme-ferreiras-team-6272';
+  const onlineAtivo = CONTADOR_WORKSPACE !== 'COLOQUE-SEU-WORKSPACE';
   let clienteGlobal = null;
 
   let pendentes = 0;
@@ -416,6 +434,113 @@
       if (pendentes < 200) pendentes++;
       enviarPendentes(); // se a biblioteca ainda não carregou, envia quando carregar
     }
+  }
+
+  // ---------- Tomate dourado (Token) ----------
+  // Chance de cada tomate ser dourado: 1 em 137.500.
+  // Para testar rapidamente, troque por algo como: 1 / 5
+  const CHANCE_TOKEN = 1 / 5;
+  const CHAVE_TOKENS = 'tokens_meus';
+
+  const elTokens = document.getElementById('tokensMeus');
+  let tokens = 0;
+  try { tokens = parseInt(localStorage.getItem(CHAVE_TOKENS), 10) || 0; } catch (e) {}
+  elTokens.textContent = tokens.toLocaleString('pt-BR');
+
+  const brilhos = [];
+  const efeito = { ativo: false, inicio: 0, dur: 3200 };
+
+  function ganharToken(x, y) {
+    tokens++;
+    elTokens.textContent = tokens.toLocaleString('pt-BR');
+    try { localStorage.setItem(CHAVE_TOKENS, String(tokens)); } catch (e) {}
+
+    efeito.ativo = true;
+    efeito.inicio = performance.now();
+
+    for (let i = 0; i < 70; i++) {
+      const a = rand(0, Math.PI * 2);
+      const v = rand(2, 11);
+      brilhos.push({
+        x, y,
+        vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+        vida: rand(0.7, 1), r: rand(2, 6)
+      });
+    }
+  }
+
+  function desenharEfeitoToken(agora) {
+    // faíscas
+    for (let i = brilhos.length - 1; i >= 0; i--) {
+      const b = brilhos[i];
+      b.x += b.vx;
+      b.y += b.vy;
+      b.vx *= 0.985;
+      b.vy *= 0.985;
+      b.vida -= 0.02;
+      if (b.vida <= 0) { brilhos.splice(i, 1); continue; }
+      ctx.fillStyle = `rgba(255, 228, 100, ${b.vida})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r * b.vida + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (!efeito.ativo) return;
+    const t = (agora - efeito.inicio) / efeito.dur;
+    if (t >= 1) { efeito.ativo = false; return; }
+
+    // a tela brilha em amarelo: sobe rápido e desvanece devagar
+    const a = t < 0.12 ? t / 0.12 : Math.pow(1 - (t - 0.12) / 0.88, 1.6);
+
+    ctx.fillStyle = `rgba(255, 205, 40, ${0.78 * a})`;
+    ctx.fillRect(0, 0, W, H);
+
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+    g.addColorStop(0, `rgba(255, 255, 220, ${0.9 * a})`);
+    g.addColorStop(1, 'rgba(255, 220, 80, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // raios girando
+    const R = Math.hypot(W, H);
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(t * 1.2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.22 * a})`;
+    for (let i = 0; i < 12; i++) {
+      ctx.rotate(Math.PI / 6);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(R, -R * 0.08);
+      ctx.lineTo(R, R * 0.08);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // texto "Token adquirido"
+    const ta = t < 0.08 ? t / 0.08 : (t > 0.8 ? (1 - t) / 0.2 : 1);
+    const esc = 0.7 + 0.3 * Math.min(1, t / 0.15);
+    const fs = Math.max(28, Math.min(W * 0.1, 64));
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(esc, esc);
+    ctx.globalAlpha = Math.max(0, Math.min(1, ta));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#8a5a00';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `900 ${fs}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    ctx.lineWidth = fs * 0.14;
+    ctx.strokeText('Token adquirido', 0, 0);
+    ctx.fillText('Token adquirido', 0, 0);
+    ctx.font = `700 ${fs * 0.42}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    ctx.lineWidth = fs * 0.07;
+    const sub = '🪙 Tokens: ' + tokens.toLocaleString('pt-BR');
+    ctx.strokeText(sub, 0, fs * 0.9);
+    ctx.fillText(sub, 0, fs * 0.9);
+    ctx.restore();
   }
 
   // ---------- Limpeza: spray de água + rodo ----------
@@ -531,98 +656,4 @@
     ctx.fillStyle = '#151515';
     ctx.fillRect(0, y, W, 6);
     ctx.fillStyle = '#8a8a8a';
-    ctx.fillRect(W / 2 - 40, y - 24, 80, 12);
-    ctx.fillStyle = '#e0a030';
-    ctx.beginPath(); ctx.roundRect(W / 2 - 11, y - 150, 22, 130, 9); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath(); ctx.roundRect(W / 2 - 6, y - 142, 4, 110, 2); ctx.fill();
-
-    if (t >= 1) {
-      mctx.clearRect(0, 0, W, H);
-      actx.clearRect(0, 0, W, H);
-      escorrendo.length = 0;
-      gotas.length = 0;
-      fase = null;
-      btn.disabled = false;
-      btn.textContent = '🧽 Limpar';
-    }
-  }
-
-  function limpeza(agora) {
-    if (fase === 'spray') atualizarSpray(agora);
-    else if (fase === 'rodo') atualizarRodo(agora);
-  }
-
-  // ---------- Loop ----------
-  function loop(agora) {
-    ctx.clearRect(0, 0, W, H);
-
-    // manchas acumuladas
-    ctx.drawImage(manchas, 0, 0, W, H);
-    ctx.drawImage(agua, 0, 0, W, H);
-
-    // sucos escorrendo (desenhados direto na camada permanente)
-    for (let i = escorrendo.length - 1; i >= 0; i--) {
-      const s = escorrendo[i];
-      mctx.fillStyle = 'rgba(190, 20, 12, 0.85)';
-      mctx.beginPath();
-      mctx.ellipse(s.x, s.y, s.larg / 2, s.vel + 0.5, 0, 0, Math.PI * 2);
-      mctx.fill();
-      s.y += s.vel;
-      s.restante -= s.vel;
-      s.vel *= 0.995;
-      if (s.restante <= 0) {
-        mctx.beginPath();
-        mctx.arc(s.x, s.y, s.larg * 0.7, 0, Math.PI * 2);
-        mctx.fill();
-        escorrendo.splice(i, 1);
-      }
-    }
-
-    // tomates voando
-    for (let i = voando.length - 1; i >= 0; i--) {
-      const v = voando[i];
-      const p = Math.min(1, (agora - v.inicio) / v.dur);
-      const x = v.sx + (v.tx - v.sx) * p;
-      const y = v.sy + (v.ty - v.sy) * p - Math.sin(p * Math.PI) * v.arco;
-      const escala = 1 - p * 0.35; // fica "menor" ao se afastar
-      v.rot += v.vrot;
-      desenharTomate(ctx, x, y, v.r0 * escala, v.rot);
-
-      if (p >= 1) {
-        impacto(v.tx, v.ty, v.tam);
-        voando.splice(i, 1);
-      }
-    }
-
-    // respingos
-    for (let i = gotas.length - 1; i >= 0; i--) {
-      const g = gotas[i];
-      g.x += g.vx;
-      g.y += g.vy;
-      g.vy += 0.45;
-      g.vida -= 0.035;
-      if (g.vida <= 0) { gotas.splice(i, 1); continue; }
-      ctx.fillStyle = `rgba(210, 30, 20, ${g.vida})`;
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, g.r * g.vida, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    try {
-      limpeza(agora);
-    } catch (err) {
-      // um erro na limpeza não pode travar o site inteiro
-      console.error(err);
-      fase = null;
-      btn.disabled = false;
-      btn.textContent = '🧽 Limpar';
-    }
-
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-})();
-</script>
-</body>
-</html>
+    ctx.fillRect(W / 2 - 40, y - 24, 
